@@ -1,5 +1,9 @@
 import os
 from dataclasses import dataclass
+from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
+
+DEFAULT_LLM_MODEL = "gemini-2.5-flash"
+DEFAULT_TIMEZONE = "UTC"
 
 
 @dataclass(frozen=True)
@@ -7,6 +11,8 @@ class Settings:
     telegram_bot_token: str
     admin_telegram_id: int
     gemini_api_key: str
+    llm_model: str = DEFAULT_LLM_MODEL
+    timezone: ZoneInfo = ZoneInfo(DEFAULT_TIMEZONE)
     env: str = "development"
 
 
@@ -15,6 +21,15 @@ def _required_env(name: str) -> str:
     if not value:
         raise RuntimeError(f"CRITICAL: {name} not found in environment.")
     return value
+
+
+def _parse_timezone(name: str) -> ZoneInfo:
+    try:
+        return ZoneInfo(name)
+    except (ZoneInfoNotFoundError, ValueError) as exc:
+        raise RuntimeError(
+            f"CRITICAL: TIMEZONE '{name}' is not a valid IANA timezone, e.g. 'Asia/Amman'."
+        ) from exc
 
 
 def load_settings() -> Settings:
@@ -33,5 +48,7 @@ def load_settings() -> Settings:
         telegram_bot_token=telegram_bot_token,
         admin_telegram_id=parsed_admin_id,
         gemini_api_key=_required_env("GEMINI_API_KEY"),
+        llm_model=os.getenv("LLM_MODEL") or DEFAULT_LLM_MODEL,
+        timezone=_parse_timezone(os.getenv("TIMEZONE") or DEFAULT_TIMEZONE),
         env=os.getenv("ENV", "development"),
     )
