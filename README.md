@@ -71,7 +71,32 @@ python main.py
 
 ## Environment Variables
 
-See `.env.example` for the required variables.
+See `.env.example` for all variables.
+
+| Variable | Required | Purpose |
+| --- | --- | --- |
+| `TELEGRAM_BOT_TOKEN` | Yes | Bot token from BotFather |
+| `ADMIN_TELEGRAM_ID` | Yes | The only Telegram user allowed to use the bot |
+| `GEMINI_API_KEY` | Yes | Gemini API key |
+| `LLM_MODEL` | No | Gemini model name, defaults to `gemini-2.5-flash` |
+| `TIMEZONE` | No | IANA timezone such as `Asia/Amman`, defaults to `UTC` |
+| `ENV` | No | `development` or `production` |
+
+## Development
+
+Install development tools:
+
+```bash
+pip install -r requirements-dev.txt
+```
+
+Run tests and checks before opening a pull request:
+
+```bash
+pytest
+ruff check .
+ruff format --check .
+```
 
 ## Repository Plan
 
