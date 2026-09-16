@@ -15,7 +15,8 @@ from core.assistant import (
 )
 from core.config import Settings
 from core.llm_router import LLMError
-from core.messages import IncomingMessage
+from core.messages import ConversationTurn, IncomingMessage
+from core.redaction import REDACTED
 
 ADMIN_ID = 42
 SETTINGS = Settings(
@@ -31,27 +32,45 @@ class FakeLLM:
         self.answer = answer
         self.error = error
         self.prompts = []
+        self.histories = []
 
-    async def generate_response(self, prompt, system_instruction=None):
+    async def generate_response(self, prompt, system_instruction=None, history=()):
         self.prompts.append(prompt)
+        self.histories.append(tuple(history))
         if self.error:
             raise self.error
         return self.answer
 
 
-def make_message(text, user_id=ADMIN_ID):
-    return IncomingMessage(user_id=user_id, chat_id=1, text=text, received_at=datetime.now(UTC))
+class FakeMessages:
+    def __init__(self, history=()):
+        self.history = tuple(history)
+        self.added = []
+
+    async def add(self, *, chat_id, role, content, user_id=None, sensitivity="low"):
+        self.added.append((chat_id, role, content, user_id))
+
+    async def recent(self, chat_id, limit):
+        return self.history[-limit:]
 
 
-def make_assistant(llm=None):
-    return Assistant(SETTINGS, llm or FakeLLM())
+def make_message(text, user_id=ADMIN_ID, chat_id=7):
+    return IncomingMessage(
+        user_id=user_id, chat_id=chat_id, text=text, received_at=datetime.now(UTC)
+    )
+
+
+def make_assistant(llm=None, messages=None):
+    return Assistant(SETTINGS, llm or FakeLLM(), messages)
 
 
 async def test_unauthorized_user_is_ignored():
     llm = FakeLLM()
+    store = FakeMessages()
 
-    assert await make_assistant(llm).handle(make_message("hello", user_id=999)) is None
+    assert await make_assistant(llm, store).handle(make_message("hi", user_id=999)) is None
     assert llm.prompts == []
+    assert store.added == []
 
 
 @pytest.mark.parametrize(
@@ -97,6 +116,38 @@ async def test_llm_failure_returns_a_friendly_message():
     response = await make_assistant(llm).handle(make_message("hello"))
 
     assert response.text == LLM_FAILURE
+
+
+async def test_previous_turns_are_sent_as_history():
+    history = (ConversationTurn("user", "my name is Moath"), ConversationTurn("assistant", "noted"))
+    llm = FakeLLM()
+
+    await make_assistant(llm, FakeMessages(history)).handle(make_message("what is my name?"))
+
+    assert llm.histories[0] == history
+
+
+async def test_both_sides_of_the_exchange_are_stored():
+    store = FakeMessages()
+
+    await make_assistant(FakeLLM(answer="hi there"), store).handle(make_message("hello"))
+
+    assert store.added == [
+        (7, "user", "hello", ADMIN_ID),
+        (7, "assistant", "hi there", None),
+    ]
+
+
+async def test_secrets_are_redacted_before_storage_and_the_llm():
+    store = FakeMessages()
+    llm = FakeLLM()
+    token = "8123456789:AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsaw2"
+
+    await make_assistant(llm, store).handle(make_message(f"my token is {token}"))
+
+    assert token not in llm.prompts[0]
+    assert REDACTED in llm.prompts[0]
+    assert token not in store.added[0][2]
 
 
 def test_system_prompt_uses_configured_timezone():

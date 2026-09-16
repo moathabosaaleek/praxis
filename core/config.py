@@ -1,9 +1,11 @@
 import os
 from dataclasses import dataclass
+from pathlib import Path
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 DEFAULT_LLM_MODEL = "gemini-2.5-flash"
 DEFAULT_TIMEZONE = "UTC"
+DEFAULT_DB_PATH = "praxis.db"
 
 
 @dataclass(frozen=True)
@@ -13,6 +15,7 @@ class Settings:
     gemini_api_key: str
     llm_model: str = DEFAULT_LLM_MODEL
     timezone: ZoneInfo = ZoneInfo(DEFAULT_TIMEZONE)
+    db_path: Path = Path(DEFAULT_DB_PATH)
     env: str = "development"
 
 
@@ -50,5 +53,6 @@ def load_settings() -> Settings:
         gemini_api_key=_required_env("GEMINI_API_KEY"),
         llm_model=os.getenv("LLM_MODEL") or DEFAULT_LLM_MODEL,
         timezone=_parse_timezone(os.getenv("TIMEZONE") or DEFAULT_TIMEZONE),
+        db_path=Path(os.getenv("DB_PATH") or DEFAULT_DB_PATH),
         env=os.getenv("ENV", "development"),
     )
