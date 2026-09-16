@@ -24,6 +24,9 @@ class Router:
     def default(self) -> Plugin:
         return self._plugins[self._default_name]
 
+    def get(self, name: str) -> Plugin | None:
+        return self._plugins.get(name)
+
     async def choose(self, message: IncomingMessage, ctx: PluginContext) -> Plugin:
         if len(self._plugins) == 1:
             return self.default

@@ -82,3 +82,16 @@ async def test_llm_failure_falls_back_to_default():
 def test_unknown_default_name_is_rejected():
     with pytest.raises(ValueError, match="default_name"):
         Router([FakePlugin("chat")], default_name="writer")
+
+
+def test_get_returns_a_registered_plugin_by_name():
+    writer = FakePlugin("writer")
+    router = Router([FakePlugin("chat"), writer], default_name="chat")
+
+    assert router.get("writer") is writer
+
+
+def test_get_returns_none_for_an_unregistered_name():
+    router = Router([FakePlugin("chat")], default_name="chat")
+
+    assert router.get("nope") is None

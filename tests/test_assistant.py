@@ -3,11 +3,21 @@ from zoneinfo import ZoneInfo
 
 import pytest
 
-from core.assistant import ASK_USAGE, EMPTY_MESSAGE, GREETING, PONG, UNKNOWN_COMMAND, Assistant
+from core.assistant import (
+    ASK_USAGE,
+    CANCELLED,
+    EMPTY_MESSAGE,
+    GREETING,
+    NOTHING_TO_CANCEL,
+    PONG,
+    UNKNOWN_COMMAND,
+    Assistant,
+)
 from core.config import Settings
 from core.messages import AssistantResponse, IncomingMessage
 from core.redaction import REDACTED
 from core.version import get_version
+from storage.repositories import Session
 
 ADMIN_ID = 42
 SETTINGS = Settings(
@@ -30,6 +40,14 @@ class FakePlugin:
         return AssistantResponse(self.reply)
 
 
+class FakeLLM:
+    def __init__(self, answer="chat"):
+        self.answer = answer
+
+    async def generate_response(self, prompt, system_instruction=None, history=()):
+        return self.answer
+
+
 class FakeMessages:
     def __init__(self):
         self.added = []
@@ -41,16 +59,37 @@ class FakeMessages:
         return ()
 
 
+class FakeSessions:
+    def __init__(self, sessions: dict[int, Session] | None = None):
+        self._sessions = dict(sessions or {})
+        self.cleared = []
+
+    async def get(self, chat_id):
+        return self._sessions.get(chat_id)
+
+    async def set(self, chat_id, plugin, state):
+        self._sessions[chat_id] = Session(plugin=plugin, state=state)
+
+    async def clear(self, chat_id):
+        self.cleared.append(chat_id)
+        self._sessions.pop(chat_id, None)
+
+
 def make_message(text, user_id=ADMIN_ID, chat_id=7):
     return IncomingMessage(
         user_id=user_id, chat_id=chat_id, text=text, received_at=datetime.now(UTC)
     )
 
 
-def make_assistant(plugin=None, messages=None):
+def make_assistant(plugin=None, messages=None, plugins=None, sessions=None, llm=None):
     plugin = plugin or FakePlugin()
     return Assistant(
-        SETTINGS, llm=None, plugins=[plugin], default_plugin_name=plugin.name, messages=messages
+        SETTINGS,
+        llm=llm or FakeLLM(),
+        plugins=plugins or [plugin],
+        default_plugin_name=(plugins[0].name if plugins else plugin.name),
+        messages=messages,
+        sessions=sessions,
     )
 
 
@@ -129,3 +168,75 @@ async def test_secrets_are_redacted_before_dispatch_and_storage():
     assert token not in plugin.received[0].text
     assert REDACTED in plugin.received[0].text
     assert token not in store.added[0][2]
+
+
+async def test_active_session_routes_directly_to_its_owner_bypassing_the_router():
+    chat = FakePlugin(name="chat", reply="chat reply")
+    writer = FakePlugin(name="writer", reply="writer reply")
+    sessions = FakeSessions({7: Session(plugin="writer", state={"step": "await_stance"})})
+
+    response = await make_assistant(plugins=[chat, writer], sessions=sessions).handle(
+        make_message("agree")
+    )
+
+    assert response.text == "writer reply"
+    assert chat.received == []
+    assert [m.text for m in writer.received] == ["agree"]
+
+
+async def test_no_active_session_falls_back_to_the_default_plugin():
+    chat = FakePlugin(name="chat", reply="chat reply")
+    writer = FakePlugin(name="writer", reply="writer reply")
+
+    response = await make_assistant(plugins=[chat, writer], sessions=FakeSessions()).handle(
+        make_message("hello")
+    )
+
+    assert response.text == "chat reply"
+    assert writer.received == []
+
+
+async def test_generic_plugin_command_starts_that_plugin_fresh():
+    chat = FakePlugin(name="chat")
+    writer = FakePlugin(name="writer", reply="writer reply")
+    sessions = FakeSessions({7: Session(plugin="chat", state={"leftover": True})})
+
+    response = await make_assistant(plugins=[chat, writer], sessions=sessions).handle(
+        make_message("/writer")
+    )
+
+    assert response.text == "writer reply"
+    assert sessions.cleared == [7]
+    assert [m.text for m in writer.received] == [""]
+
+
+async def test_generic_plugin_command_passes_its_argument_as_text():
+    chat = FakePlugin(name="chat")
+    writer = FakePlugin(name="writer")
+
+    await make_assistant(plugins=[chat, writer], sessions=FakeSessions()).handle(
+        make_message("/writer about ransomware trends")
+    )
+
+    assert [m.text for m in writer.received] == ["about ransomware trends"]
+
+
+async def test_cancel_clears_an_active_session():
+    sessions = FakeSessions({7: Session(plugin="chat", state={})})
+
+    response = await make_assistant(sessions=sessions).handle(make_message("/cancel"))
+
+    assert response.text == CANCELLED
+    assert sessions.cleared == [7]
+
+
+async def test_cancel_with_no_active_session():
+    response = await make_assistant(sessions=FakeSessions()).handle(make_message("/cancel"))
+
+    assert response.text == NOTHING_TO_CANCEL
+
+
+async def test_cancel_without_a_session_store_configured():
+    response = await make_assistant(sessions=None).handle(make_message("/cancel"))
+
+    assert response.text == NOTHING_TO_CANCEL
