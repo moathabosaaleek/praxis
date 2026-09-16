@@ -16,6 +16,12 @@ class Choice:
 
 
 @dataclass(frozen=True)
+class ConversationTurn:
+    role: str  # "user" or "assistant"
+    text: str
+
+
+@dataclass(frozen=True)
 class IncomingMessage:
     user_id: int
     chat_id: int

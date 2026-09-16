@@ -80,6 +80,7 @@ See `.env.example` for all variables.
 | `GEMINI_API_KEY` | Yes | Gemini API key |
 | `LLM_MODEL` | No | Gemini model name, defaults to `gemini-2.5-flash` |
 | `TIMEZONE` | No | IANA timezone such as `Asia/Amman`, defaults to `UTC` |
+| `DB_PATH` | No | SQLite file for history and memory, defaults to `praxis.db` |
 | `ENV` | No | `development` or `production` |
 
 ## Development

@@ -19,6 +19,8 @@ from core.config import Settings
 from core.llm_router import PraxisLLM
 from core.messages import AssistantResponse, IncomingMessage
 from interfaces.telegram.formatting import markdown_to_telegram_html, split_message
+from storage.db import Database
+from storage.repositories import MessageRepository
 
 logger = logging.getLogger(__name__)
 
@@ -111,10 +113,33 @@ async def handle_update(update: Update, context: ContextTypes.DEFAULT_TYPE) -> N
         await send_formatted(send, chunk, markup)
 
 
+async def on_startup(app: Application) -> None:
+    settings: Settings = app.bot_data["settings"]
+    database = Database(settings.db_path)
+    await database.connect()
+    app.bot_data["database"] = database
+    app.bot_data["assistant"] = Assistant(
+        settings, PraxisLLM(settings), MessageRepository(database)
+    )
+    logger.info("Storage ready at %s", settings.db_path)
+
+
+async def on_shutdown(app: Application) -> None:
+    database: Database | None = app.bot_data.get("database")
+    if database is not None:
+        await database.close()
+        logger.info("Storage closed")
+
+
 def build_application(settings: Settings) -> Application:
-    app = ApplicationBuilder().token(settings.telegram_bot_token).build()
+    app = (
+        ApplicationBuilder()
+        .token(settings.telegram_bot_token)
+        .post_init(on_startup)
+        .post_shutdown(on_shutdown)
+        .build()
+    )
     app.bot_data["settings"] = settings
-    app.bot_data["assistant"] = Assistant(settings, PraxisLLM(settings))
 
     # UpdateType.MESSAGE excludes edited messages, which would otherwise re-trigger handlers.
     app.add_handler(MessageHandler(filters.UpdateType.MESSAGE & filters.TEXT, handle_update))
