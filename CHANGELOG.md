@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.4.0](https://github.com/moathabosaaleek/praxis/compare/v0.3.0...v0.4.0) (2026-09-16)
+
+
+### Features
+
+* add X writer plugin with guided opinion interview ([4eb93f7](https://github.com/moathabosaaleek/praxis/commit/4eb93f79e37f04452a4a435047b31b2056bd84b9))
+* add X writer plugin with guided opinion interview ([49dadd5](https://github.com/moathabosaaleek/praxis/commit/49dadd59cfd8eb624b529216e5524d9b746a28ec))
+
 ## [0.3.0](https://github.com/moathabosaaleek/praxis/compare/v0.2.0...v0.3.0) (2026-09-16)
 
 
