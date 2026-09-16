@@ -99,6 +99,23 @@ ruff check .
 ruff format --check .
 ```
 
+## Versioning and Releases
+
+Praxis follows [Semantic Versioning](https://semver.org/) and uses [Conventional Commits](https://www.conventionalcommits.org/) for commit messages, most commonly:
+
+- `feat:` a new capability
+- `fix:` a bug fix
+- `chore:` tooling, dependencies, or config with no behavior change
+- `refactor:` internal restructuring with no behavior change
+- `docs:` documentation only
+- `test:` tests only
+
+On every push to `main`, [release-please](https://github.com/googleapis/release-please) opens or updates a release pull request that accumulates the pending changes into `CHANGELOG.md`. Merging that pull request tags the release and bumps the version in `pyproject.toml`.
+
+The bot reports its own running version with `/version` in Telegram, and logs it on startup. This is the fastest way to confirm which build is deployed when debugging.
+
+While the project is at `0.x`, breaking changes can land without a major version bump.
+
 ## Repository Plan
 
 This repository contains the public Praxis core.

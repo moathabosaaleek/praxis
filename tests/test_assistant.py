@@ -17,6 +17,7 @@ from core.config import Settings
 from core.llm_router import LLMError
 from core.messages import ConversationTurn, IncomingMessage
 from core.redaction import REDACTED
+from core.version import get_version
 
 ADMIN_ID = 42
 SETTINGS = Settings(
@@ -148,6 +149,15 @@ async def test_secrets_are_redacted_before_storage_and_the_llm():
     assert token not in llm.prompts[0]
     assert REDACTED in llm.prompts[0]
     assert token not in store.added[0][2]
+
+
+async def test_version_command_does_not_call_the_llm():
+    llm = FakeLLM()
+
+    response = await make_assistant(llm).handle(make_message("/version"))
+
+    assert response.text == f"Praxis v{get_version()}"
+    assert llm.prompts == []
 
 
 def test_system_prompt_uses_configured_timezone():

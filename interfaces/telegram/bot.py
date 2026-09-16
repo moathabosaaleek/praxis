@@ -18,6 +18,7 @@ from core.assistant import Assistant
 from core.config import Settings
 from core.llm_router import PraxisLLM
 from core.messages import AssistantResponse, IncomingMessage
+from core.version import get_version
 from interfaces.telegram.formatting import markdown_to_telegram_html, split_message
 from storage.db import Database
 from storage.repositories import MessageRepository
@@ -150,7 +151,10 @@ def build_application(settings: Settings) -> Application:
 def run_telegram_bot(settings: Settings):
     app = build_application(settings)
     logger.info(
-        "Praxis is listening on Telegram (model=%s, env=%s)", settings.llm_model, settings.env
+        "Praxis v%s is listening on Telegram (model=%s, env=%s)",
+        get_version(),
+        settings.llm_model,
+        settings.env,
     )
     # Ignore anything sent while the bot was offline instead of replying to a backlog.
     app.run_polling(drop_pending_updates=True)

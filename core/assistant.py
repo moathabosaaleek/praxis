@@ -5,6 +5,7 @@ from core.config import Settings
 from core.llm_router import LLMError, PraxisLLM
 from core.messages import AssistantResponse, ConversationTurn, IncomingMessage
 from core.redaction import redact
+from core.version import get_version
 from storage.repositories import MessageRepository
 
 logger = logging.getLogger(__name__)
@@ -70,6 +71,8 @@ class Assistant:
             return AssistantResponse(GREETING)
         if name == "ping":
             return AssistantResponse(PONG)
+        if name == "version":
+            return AssistantResponse(f"Praxis v{get_version()}")
         if name != "ask":
             return AssistantResponse(UNKNOWN_COMMAND)
 
