@@ -1,103 +1,124 @@
 import logging
 from collections.abc import Awaitable, Callable
-from datetime import datetime
-from functools import wraps
+from datetime import UTC, datetime
 
-from telegram import Update
+from telegram import InlineKeyboardButton, InlineKeyboardMarkup, Update
 from telegram.constants import ParseMode
 from telegram.error import BadRequest
-from telegram.ext import Application, ApplicationBuilder, CommandHandler, ContextTypes
+from telegram.ext import (
+    Application,
+    ApplicationBuilder,
+    CallbackQueryHandler,
+    ContextTypes,
+    MessageHandler,
+    filters,
+)
 
+from core.assistant import Assistant
 from core.config import Settings
-from core.llm_router import LLMError, PraxisLLM
+from core.llm_router import PraxisLLM
+from core.messages import AssistantResponse, IncomingMessage
 from interfaces.telegram.formatting import markdown_to_telegram_html, split_message
 
 logger = logging.getLogger(__name__)
 
-
-def require_admin(settings: Settings):
-    def decorator(func):
-        @wraps(func)
-        async def wrapper(update: Update, context: ContextTypes.DEFAULT_TYPE, *args, **kwargs):
-            if not update.effective_user:
-                return
-
-            user_id = update.effective_user.id
-            if user_id != settings.admin_telegram_id:
-                logger.warning("Unauthorized access attempt blocked from User ID: %s", user_id)
-                return
-
-            return await func(update, context, *args, **kwargs)
-
-        return wrapper
-
-    return decorator
+THINKING = "Thinking..."
 
 
-def build_system_prompt(settings: Settings) -> str:
-    now = datetime.now(settings.timezone)
-    return (
-        "You are Praxis, a concise technical assistant for a single user. "
-        f"The user's current local time is {now:%A, %B %d, %Y %H:%M} ({settings.timezone.key}). "
-        "Use it for any question about today, tomorrow, or other dates. "
-        "Keep answers concise and accurate, and avoid corporate jargon. "
-        "Format only with **bold**, `inline code`, and fenced code blocks. Do not use tables."
+def to_incoming_message(update: Update) -> IncomingMessage | None:
+    message = update.effective_message
+    user = update.effective_user
+    if message is None or user is None:
+        return None
+
+    received_at = datetime.now(UTC)
+
+    if update.callback_query is not None:
+        choice = update.callback_query.data or ""
+        return IncomingMessage(
+            user_id=user.id,
+            chat_id=message.chat_id,
+            text=choice,
+            received_at=received_at,
+            choice=choice,
+        )
+
+    if not message.text:
+        return None
+
+    return IncomingMessage(
+        user_id=user.id,
+        chat_id=message.chat_id,
+        text=message.text,
+        received_at=received_at,
     )
 
 
-async def send_formatted(send: Callable[..., Awaitable], text: str) -> None:
+def build_keyboard(response: AssistantResponse) -> InlineKeyboardMarkup | None:
+    if not response.choices:
+        return None
+    return InlineKeyboardMarkup(
+        [
+            [InlineKeyboardButton(choice.label, callback_data=choice.value)]
+            for choice in response.choices
+        ]
+    )
+
+
+async def send_formatted(
+    send: Callable[..., Awaitable],
+    text: str,
+    reply_markup: InlineKeyboardMarkup | None = None,
+) -> None:
     try:
-        await send(markdown_to_telegram_html(text), parse_mode=ParseMode.HTML)
+        await send(
+            markdown_to_telegram_html(text), parse_mode=ParseMode.HTML, reply_markup=reply_markup
+        )
     except BadRequest:
         logger.warning("Telegram rejected formatted message; falling back to plain text")
-        await send(text)
+        await send(text, reply_markup=reply_markup)
 
 
-async def start_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.effective_message.reply_text("Praxis is online.")
-
-
-async def ping_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    await update.effective_message.reply_text("Pong! The core engine is responsive.")
-
-
-async def ask_command(update: Update, context: ContextTypes.DEFAULT_TYPE):
-    message = update.effective_message
-    settings: Settings = context.bot_data["settings"]
-    llm: PraxisLLM = context.bot_data["llm"]
-
-    user_query = " ".join(context.args or [])
-    if not user_query:
-        await message.reply_text(
-            "Please provide a question. Example: /ask What is a Git submodule?"
-        )
+async def handle_update(update: Update, context: ContextTypes.DEFAULT_TYPE) -> None:
+    incoming = to_incoming_message(update)
+    if incoming is None:
         return
 
-    placeholder = await message.reply_text("Thinking...")
-
-    try:
-        answer = await llm.generate_response(
-            user_query, system_instruction=build_system_prompt(settings)
-        )
-    except LLMError:
-        await placeholder.edit_text("Sorry, I couldn't get an answer right now. Please try again.")
+    assistant: Assistant = context.bot_data["assistant"]
+    if not assistant.is_authorized(incoming.user_id):
+        logger.warning("Unauthorized access attempt blocked from User ID: %s", incoming.user_id)
         return
 
-    chunks = split_message(answer)
-    await send_formatted(placeholder.edit_text, chunks[0])
-    for chunk in chunks[1:]:
-        await send_formatted(message.reply_text, chunk)
+    if update.callback_query is not None:
+        await update.callback_query.answer()
+
+    placeholder = await context.bot.send_message(incoming.chat_id, THINKING)
+    response = await assistant.handle(incoming)
+    if response is None:
+        await placeholder.delete()
+        return
+
+    async def reply(text: str, **kwargs) -> None:
+        await context.bot.send_message(incoming.chat_id, text, **kwargs)
+
+    chunks = split_message(response.text)
+    keyboard = build_keyboard(response)
+
+    for index, chunk in enumerate(chunks):
+        is_last = index == len(chunks) - 1
+        markup = keyboard if is_last else None
+        send = placeholder.edit_text if index == 0 else reply
+        await send_formatted(send, chunk, markup)
 
 
 def build_application(settings: Settings) -> Application:
     app = ApplicationBuilder().token(settings.telegram_bot_token).build()
     app.bot_data["settings"] = settings
-    app.bot_data["llm"] = PraxisLLM(settings)
+    app.bot_data["assistant"] = Assistant(settings, PraxisLLM(settings))
 
-    admin_only = require_admin(settings)
-    app.add_handler(CommandHandler("start", admin_only(start_command)))
-    app.add_handler(CommandHandler("ping", admin_only(ping_command)))
-    app.add_handler(CommandHandler("ask", admin_only(ask_command)))
+    # UpdateType.MESSAGE excludes edited messages, which would otherwise re-trigger handlers.
+    app.add_handler(MessageHandler(filters.UpdateType.MESSAGE & filters.TEXT, handle_update))
+    app.add_handler(CallbackQueryHandler(handle_update))
     return app
 
 
@@ -106,4 +127,5 @@ def run_telegram_bot(settings: Settings):
     logger.info(
         "Praxis is listening on Telegram (model=%s, env=%s)", settings.llm_model, settings.env
     )
-    app.run_polling()
+    # Ignore anything sent while the bot was offline instead of replying to a backlog.
+    app.run_polling(drop_pending_updates=True)
