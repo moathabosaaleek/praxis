@@ -20,6 +20,7 @@ from core.llm_router import PraxisLLM
 from core.messages import AssistantResponse, IncomingMessage
 from core.version import get_version
 from interfaces.telegram.formatting import markdown_to_telegram_html, split_message
+from plugins.chat import ChatPlugin
 from storage.db import Database
 from storage.repositories import MessageRepository
 
@@ -120,7 +121,11 @@ async def on_startup(app: Application) -> None:
     await database.connect()
     app.bot_data["database"] = database
     app.bot_data["assistant"] = Assistant(
-        settings, PraxisLLM(settings), MessageRepository(database)
+        settings,
+        PraxisLLM(settings),
+        plugins=[ChatPlugin()],
+        default_plugin_name="chat",
+        messages=MessageRepository(database),
     )
     logger.info("Storage ready at %s", settings.db_path)
 
