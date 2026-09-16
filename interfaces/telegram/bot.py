@@ -21,8 +21,9 @@ from core.messages import AssistantResponse, IncomingMessage
 from core.version import get_version
 from interfaces.telegram.formatting import markdown_to_telegram_html, split_message
 from plugins.chat import ChatPlugin
+from plugins.writer import WriterPlugin
 from storage.db import Database
-from storage.repositories import MessageRepository
+from storage.repositories import MessageRepository, SessionRepository
 
 logger = logging.getLogger(__name__)
 
@@ -123,9 +124,10 @@ async def on_startup(app: Application) -> None:
     app.bot_data["assistant"] = Assistant(
         settings,
         PraxisLLM(settings),
-        plugins=[ChatPlugin()],
+        plugins=[ChatPlugin(), WriterPlugin()],
         default_plugin_name="chat",
         messages=MessageRepository(database),
+        sessions=SessionRepository(database),
     )
     logger.info("Storage ready at %s", settings.db_path)
 
