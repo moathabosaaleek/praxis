@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.3.0](https://github.com/moathabosaaleek/praxis/compare/v0.2.0...v0.3.0) (2026-09-16)
+
+
+### Features
+
+* add plugin system with chat as the first plugin ([cd18990](https://github.com/moathabosaaleek/praxis/commit/cd18990b97822e1072005166091e8058cd716589))
+* add plugin system with chat as the first plugin ([8371a6c](https://github.com/moathabosaaleek/praxis/commit/8371a6c39d9d25cd1b2e5d5497845b5fd061564b))
+
 ## [0.2.0](https://github.com/moathabosaaleek/praxis/compare/v0.1.0...v0.2.0) (2026-09-16)
 
 
