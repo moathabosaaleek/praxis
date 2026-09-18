@@ -3,7 +3,7 @@ from collections.abc import Sequence
 from dataclasses import replace
 
 from core.config import Settings
-from core.llm_router import PraxisLLM
+from core.llm_router import LLMQuotaError, LLMRateLimitError, PraxisLLM
 from core.messages import AssistantResponse, IncomingMessage
 from core.plugin import Plugin, PluginContext
 from core.redaction import redact
@@ -20,6 +20,15 @@ EMPTY_MESSAGE = "I didn't get any text to work with."
 UNKNOWN_COMMAND = "I don't know that command. Just type a normal message instead."
 CANCELLED = "Cancelled."
 NOTHING_TO_CANCEL = "Nothing to cancel."
+OUT_OF_QUOTA = (
+    "I've used up the daily limit on the AI model, so I can't think right now.\n\n"
+    "You can wait until the limit resets, or set a different model in your .env file "
+    "(LLM_MODEL) and restart me."
+)
+TOO_FAST = (
+    "I'm asking the AI model too quickly for the free plan. "
+    "Give it a few seconds, then send that again."
+)
 
 
 class Assistant:
@@ -52,7 +61,14 @@ class Assistant:
         if not text:
             return AssistantResponse(EMPTY_MESSAGE)
 
-        response = await self._route(text, message)
+        try:
+            response = await self._route(text, message)
+        except LLMQuotaError:
+            # Say why, instead of leaving the user with a confusing fallback reply.
+            return AssistantResponse(OUT_OF_QUOTA)
+        except LLMRateLimitError:
+            return AssistantResponse(TOO_FAST)
+
         await self._remember(message, text, response)
         return response
 

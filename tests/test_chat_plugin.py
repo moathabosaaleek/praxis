@@ -21,10 +21,12 @@ class FakeLLM:
         self.error = error
         self.prompts = []
         self.histories = []
+        self.searches = []
 
-    async def generate_response(self, prompt, system_instruction=None, history=()):
+    async def generate_response(self, prompt, system_instruction=None, history=(), search=False):
         self.prompts.append(prompt)
         self.histories.append(tuple(history))
+        self.searches.append(search)
         if self.error:
             raise self.error
         return self.answer
@@ -44,6 +46,14 @@ def make_message(text):
 
 def make_ctx(llm=None, messages=None):
     return PluginContext(settings=SETTINGS, llm=llm or FakeLLM(), messages=messages)
+
+
+async def test_chat_asks_for_web_grounding():
+    llm = FakeLLM()
+
+    await ChatPlugin().handle(make_message("what happened today?"), make_ctx(llm))
+
+    assert llm.searches == [True]
 
 
 async def test_plain_prompt_is_sent_to_the_llm():

@@ -9,11 +9,14 @@ from core.assistant import (
     EMPTY_MESSAGE,
     GREETING,
     NOTHING_TO_CANCEL,
+    OUT_OF_QUOTA,
     PONG,
+    TOO_FAST,
     UNKNOWN_COMMAND,
     Assistant,
 )
 from core.config import Settings
+from core.llm_router import LLMQuotaError, LLMRateLimitError
 from core.messages import AssistantResponse, IncomingMessage
 from core.redaction import REDACTED
 from core.version import get_version
@@ -29,14 +32,17 @@ SETTINGS = Settings(
 
 
 class FakePlugin:
-    def __init__(self, name="chat", reply="a reply"):
+    def __init__(self, name="chat", reply="a reply", error=None):
         self.name = name
         self.description = f"fake plugin {name}"
         self.reply = reply
+        self.error = error
         self.received = []
 
     async def handle(self, message, ctx):
         self.received.append(message)
+        if self.error:
+            raise self.error
         return AssistantResponse(self.reply)
 
 
@@ -240,3 +246,22 @@ async def test_cancel_without_a_session_store_configured():
     response = await make_assistant(sessions=None).handle(make_message("/cancel"))
 
     assert response.text == NOTHING_TO_CANCEL
+
+
+async def test_running_out_of_quota_tells_the_user_why():
+    plugin = FakePlugin(error=LLMQuotaError("429 RESOURCE_EXHAUSTED"))
+    store = FakeMessages()
+
+    response = await make_assistant(plugin, store).handle(make_message("hello"))
+
+    assert response.text == OUT_OF_QUOTA
+    assert store.added == []  # a failed exchange is not stored as if it happened
+
+
+async def test_a_short_rate_limit_says_to_wait_not_to_give_up():
+    plugin = FakePlugin(error=LLMRateLimitError("429", retry_after=3.0))
+
+    response = await make_assistant(plugin).handle(make_message("hello"))
+
+    assert response.text == TOO_FAST
+    assert response.text != OUT_OF_QUOTA
