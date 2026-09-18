@@ -1,5 +1,13 @@
 # Changelog
 
+## [0.5.0](https://github.com/moathabosaaleek/praxis/compare/v0.4.0...v0.5.0) (2026-09-18)
+
+
+### Features
+
+* make the writer interview a real conversation ([9b4c010](https://github.com/moathabosaaleek/praxis/commit/9b4c010fbf1820283687ad88da94931e0435a774))
+* make the writer interview a real conversation ([a974cfa](https://github.com/moathabosaaleek/praxis/commit/a974cfa51e3f134343e7407ad1dc623e27775310))
+
 ## [0.4.0](https://github.com/moathabosaaleek/praxis/compare/v0.3.0...v0.4.0) (2026-09-16)
 
 
