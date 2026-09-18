@@ -6,7 +6,8 @@ REDACTED = "[REDACTED]"
 _SECRET_PATTERNS = (
     re.compile(r"-----BEGIN[A-Z ]*PRIVATE KEY-----.*?-----END[A-Z ]*PRIVATE KEY-----", re.DOTALL),
     re.compile(r"\b\d{8,10}:[A-Za-z0-9_-]{35}\b"),  # Telegram bot token
-    re.compile(r"\bAIza[0-9A-Za-z_-]{35}\b"),  # Google API key
+    re.compile(r"\bAIza[0-9A-Za-z_-]{35}\b"),  # Google API key (older format)
+    re.compile(r"\bAQ\.[A-Za-z0-9_-]{20,}\b"),  # Google API key (newer AI Studio format)
     re.compile(r"\bAKIA[0-9A-Z]{16}\b"),  # AWS access key id
     re.compile(r"\bgh[pousr]_[A-Za-z0-9]{20,}\b"),  # GitHub token
     re.compile(r"\bsk-[A-Za-z0-9_-]{20,}\b"),  # OpenAI-style key

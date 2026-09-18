@@ -6,6 +6,7 @@ from core.redaction import REDACTED, redact
 # fixtures don't trip GitHub secret scanning even though no such secret exists.
 _FAKE_TELEGRAM_TOKEN = "8123456789" + ":" + "AAHdqTcvCH1vGWJxfSeofSAs0K5PALDsaw2"
 _FAKE_GOOGLE_KEY = "AIza" + "SyD-1234567890abcdefghijklmnopqrstu"
+_FAKE_GOOGLE_NEW_KEY = "AQ." + "Ab8RN6Kd9vQ2xZmT4pLwYcJhEuNsGfBdRtVaXoPiMnQwErTyUi"
 _FAKE_AWS_KEY = "AKIA" + "IOSFODNN7EXAMPLE"
 _FAKE_GITHUB_TOKEN = "ghp_" + "1234567890abcdefghijklmnopqrstuvwxyz"
 _FAKE_OPENAI_KEY = "sk-" + "abcdefghijklmnopqrstuvwxyz1234"
@@ -16,6 +17,7 @@ _FAKE_OPENAI_KEY = "sk-" + "abcdefghijklmnopqrstuvwxyz1234"
     [
         _FAKE_TELEGRAM_TOKEN,
         _FAKE_GOOGLE_KEY,
+        _FAKE_GOOGLE_NEW_KEY,
         _FAKE_AWS_KEY,
         _FAKE_GITHUB_TOKEN,
         _FAKE_OPENAI_KEY,

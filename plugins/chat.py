@@ -30,6 +30,8 @@ class ChatPlugin:
                 message.text,
                 system_instruction=build_system_prompt(ctx.settings),
                 history=history,
+                # Ordinary questions can need current facts, so ground this one.
+                search=True,
             )
         except LLMError:
             return AssistantResponse(LLM_FAILURE)
