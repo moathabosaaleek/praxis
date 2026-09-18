@@ -3,6 +3,9 @@ name: release-please
 on:
   push:
     branches: [main]
+  # GitHub occasionally drops a push event, which silently skips a release.
+  # This allows starting the run by hand: gh workflow run release-please.yml
+  workflow_dispatch:
 
 permissions:
   contents: write
