@@ -1,10 +1,14 @@
+from types import SimpleNamespace
+
 import pytest
 
+from core.config import Settings
 from core.llm_router import (
     MAX_RETRY_AFTER,
     LLMError,
     LLMQuotaError,
     LLMRateLimitError,
+    PraxisLLM,
     _as_llm_error,
     _call_with_retry,
 )
@@ -142,6 +146,47 @@ async def test_a_burst_limit_that_never_clears_still_raises():
 
     with pytest.raises(LLMRateLimitError):
         await _call_with_retry(send, "test")
+
+
+class FakeModels:
+    """Mimics the SDK: refuses whenever the search tool is attached."""
+
+    def __init__(self, text="answer without grounding"):
+        self.text = text
+        self.tools_per_call = []
+
+    async def generate_content(self, *, model, contents, config):
+        self.tools_per_call.append(bool(config.tools))
+        if config.tools:
+            # Grounding refusals carry no quotaId and no retry hint.
+            raise Exception("429 RESOURCE_EXHAUSTED. {'error': {'code': 429}}")
+        return SimpleNamespace(text=self.text)
+
+
+def make_llm(models):
+    settings = Settings(telegram_bot_token="1:a", admin_telegram_id=1, gemini_api_key="k")
+    llm = PraxisLLM(settings)
+    llm._client = SimpleNamespace(aio=SimpleNamespace(models=models))
+    return llm
+
+
+async def test_chat_falls_back_to_no_grounding_when_search_is_refused():
+    models = FakeModels()
+
+    answer = await make_llm(models).generate_response("what happened today?", search=True)
+
+    assert answer == "answer without grounding"
+    assert models.tools_per_call == [True, False]  # tried with search, then without
+
+
+async def test_a_call_that_never_wanted_search_is_not_retried():
+    models = FakeModels()
+    models.text = "fine"
+
+    answer = await make_llm(models).generate_response("hello", search=False)
+
+    assert answer == "fine"
+    assert models.tools_per_call == [False]
 
 
 async def test_a_normal_call_is_not_retried():
