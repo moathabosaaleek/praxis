@@ -149,26 +149,36 @@ class PraxisLLM:
         Grounding is metered separately from the model, so attaching it to calls
         that do not need it burns a quota that has nothing to do with the request.
         """
-        config = types.GenerateContentConfig(
-            system_instruction=system_instruction,
-            tools=[types.Tool(google_search=types.GoogleSearch())] if search else None,
-            automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
-        )
-
         contents = [
             types.Content(role=_GEMINI_ROLES[turn.role], parts=[types.Part(text=turn.text)])
             for turn in history
         ]
         contents.append(types.Content(role="user", parts=[types.Part(text=prompt)]))
 
-        response = await _call_with_retry(
-            lambda: self._client.aio.models.generate_content(
-                model=self._model,
-                contents=contents,
-                config=config,
-            ),
-            "LLM request",
-        )
+        def attempt(with_search: bool):
+            config = types.GenerateContentConfig(
+                system_instruction=system_instruction,
+                tools=[types.Tool(google_search=types.GoogleSearch())] if with_search else None,
+                automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
+            )
+            return _call_with_retry(
+                lambda: self._client.aio.models.generate_content(
+                    model=self._model,
+                    contents=contents,
+                    config=config,
+                ),
+                "LLM request",
+            )
+
+        try:
+            response = await attempt(search)
+        except (LLMQuotaError, LLMRateLimitError):
+            if not search:
+                raise
+            # Grounding has its own quota. An answer without live web facts beats
+            # no answer at all, so drop the tool and ask again.
+            logger.warning("Search grounding refused, retrying without it")
+            response = await attempt(False)
 
         if not response.text or not response.text.strip():
             logger.error("LLM returned an empty response")

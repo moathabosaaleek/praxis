@@ -15,6 +15,7 @@ from plugins.writer import (
     NEED_ANSWER,
     NEED_TOPIC,
     NO_OPINION_YET,
+    SIMPLE_ENGLISH,
     STANCE_CHOICES,
     SUMMARY_CHOICES,
     TAP_STANCE,
@@ -601,6 +602,127 @@ async def test_addendum_text_produces_a_draft_including_the_note():
     assert response.text == "final draft"
     assert "make it punchier" in llm.prompts[0]
     assert sessions.cleared is True
+
+
+async def test_the_draft_is_given_the_users_own_words_not_just_the_summary():
+    """Drafting from the paraphrase alone is what made earlier posts sound generic."""
+    session = Session(
+        plugin="writer",
+        state={
+            "step": "await_summary_choice",
+            "topic": "password managers",
+            "summary": "• You think offline managers are safer",
+            "transcript": [
+                {"role": "assistant", "text": "How do you keep passwords safe?"},
+                {"role": "user", "text": "offline like keepassxc is a real improvment"},
+            ],
+        },
+    )
+    llm = FakeLLM(answers=["the draft"])
+
+    await WriterPlugin().handle(
+        make_message(choice="writer:summary:confirm"), make_ctx(llm, FakeSessions(session))
+    )
+
+    prompt = llm.prompts[0]
+    assert "offline like keepassxc is a real improvment" in prompt
+    assert "You think offline managers are safer" in prompt
+
+
+async def test_the_draft_is_told_to_fix_mistakes_but_not_to_guess():
+    session = Session(
+        plugin="writer",
+        state={"step": "await_summary_choice", "topic": "X", "summary": "• point"},
+    )
+    llm = FakeLLM(answers=["the draft"])
+
+    await WriterPlugin().handle(
+        make_message(choice="writer:summary:confirm"), make_ctx(llm, FakeSessions(session))
+    )
+
+    prompt = llm.prompts[0]
+    assert "Correct any mistakes" in prompt
+    assert "not certain" in prompt
+    assert "fix every grammar mistake" in prompt
+
+
+async def test_the_draft_does_not_get_the_simple_english_rule():
+    """Plain English helps the questions, but it flattens the user's voice in a post."""
+    session = Session(
+        plugin="writer",
+        state={"step": "await_summary_choice", "topic": "X", "summary": "• point"},
+    )
+    llm = FakeLLM(answers=["the draft"])
+
+    await WriterPlugin().handle(
+        make_message(choice="writer:summary:confirm"), make_ctx(llm, FakeSessions(session))
+    )
+
+    assert SIMPLE_ENGLISH not in llm.prompts[0]
+
+
+async def test_the_questions_still_use_simple_english():
+    llm = FakeLLM(answers=["a claim"])
+
+    await WriterPlugin().handle(make_message("some topic"), make_ctx(llm, FakeSessions()))
+
+    assert SIMPLE_ENGLISH in llm.prompts[0]
+
+
+async def test_the_two_options_are_asked_to_differ():
+    session = Session(
+        plugin="writer",
+        state={"step": "await_summary_choice", "topic": "X", "summary": "• point"},
+    )
+    llm = FakeLLM(answers=["the draft"])
+
+    await WriterPlugin().handle(
+        make_message(choice="writer:summary:confirm"), make_ctx(llm, FakeSessions(session))
+    )
+
+    prompt = llm.prompts[0]
+    assert "must make different points" in prompt
+    assert "Option 1 is the sharp opinion" in prompt
+    assert "Option 2 makes it concrete" in prompt
+
+
+async def test_the_draft_may_not_invent_personal_experience():
+    """Regression: 'they spend 90 days' was turned into 'I've spent the 90-day window'."""
+    session = Session(
+        plugin="writer",
+        state={"step": "await_summary_choice", "topic": "X", "summary": "• point"},
+    )
+    llm = FakeLLM(answers=["the draft"])
+
+    await WriterPlugin().handle(
+        make_message(choice="writer:summary:confirm"), make_ctx(llm, FakeSessions(session))
+    )
+
+    prompt = llm.prompts[0]
+    assert "Only write it as their personal experience" in prompt
+    assert "made-up personal story is a false claim" in prompt
+
+
+async def test_the_draft_is_told_not_to_parrot_the_users_sentences():
+    """Showing their words is for tone, not for copy-paste."""
+    session = Session(
+        plugin="writer",
+        state={
+            "step": "await_summary_choice",
+            "topic": "X",
+            "summary": "• point",
+            "transcript": [{"role": "user", "text": "a real problems happen"}],
+        },
+    )
+    llm = FakeLLM(answers=["the draft"])
+
+    await WriterPlugin().handle(
+        make_message(choice="writer:summary:confirm"), make_ctx(llm, FakeSessions(session))
+    )
+
+    prompt = llm.prompts[0]
+    assert "Do NOT reuse their sentences" in prompt
+    assert "fix every grammar mistake" in prompt
 
 
 async def test_draft_strips_stray_markdown_emphasis_since_it_is_copied_verbatim():

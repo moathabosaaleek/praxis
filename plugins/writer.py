@@ -62,6 +62,24 @@ SIMPLE_ENGLISH = (
     "Avoid academic or complicated phrasing. Do not repeat the question back to them."
 )
 
+# Only for the draft. The questions stay in simple English so they are easy to read,
+# but the post itself has to sound like the user, not like simplified English.
+DRAFT_VOICE = (
+    "Write in their voice: a technical person based in the US, posting naturally on X. "
+    "Use contractions where they fit (it's, you're, doesn't). Be direct and first person, "
+    "with no corporate tone and no buzzwords.\n"
+    "Their own words are shown only so you can match their tone, vocabulary and opinions. "
+    "Do NOT reuse their sentences. Write new sentences that say the same thing better. "
+    "If a phrase of theirs appears word for word in your post, rewrite it.\n"
+    "Their English is not perfect, so fix every grammar mistake. For example 'a real "
+    "problems' becomes 'real problems'. The post must read as fluent native English.\n"
+    "Keep the specific details they mentioned, such as tool names, numbers and examples, "
+    "because those are what make it sound like them. Correct any mistakes in those details: "
+    "fix spelling and capitalization of product names, and fix a fact they got wrong. "
+    "If you are not certain a detail is correct, write it in a more general way instead of "
+    "guessing. Never state a technical claim you are unsure about."
+)
+
 NO_OPINION_YET = (
     "You haven't told me your opinion yet, so this is a general post about the topic "
     "rather than your own view.\n\n"
@@ -444,18 +462,30 @@ class WriterPlugin:
                 "topic. Do not invent or claim a personal opinion for them."
             )
         else:
-            view = f"Summary of the user's view:\n{summary}{extra}"
+            view = f"What they decided to say, which they approved:\n{summary}{extra}"
+
+        # Their own words carry the voice and the specifics. The summary is only a
+        # paraphrase, so drafting from it alone is what made earlier posts generic.
+        spoken = "\n".join(_answers(state.get("transcript", [])))
+        own_words = f"\n\nHow they actually talk, in their own words:\n{spoken}" if spoken else ""
 
         prompt = (
-            "Write two alternative short posts for X (Twitter), each under 280 characters, "
-            "in a direct, first-person, non-corporate tone. Write them "
-            "as plain text with no markdown formatting at all (no asterisks, no bold, no "
-            "italics) since this will be copied directly into a tweet:\n\n"
-            f"Topic: {state.get('topic')}\n{view}\n\n"
-            "Only suggest hashtags if they would genuinely help (many technical audiences see "
-            "hashtags as spam, so it is fine to suggest none). Format exactly as:\n\n"
-            "Option 1:\n<text>\n\nOption 2:\n<text>\n\nHashtags: <comma-separated or 'none'>\n\n"
-            f"{SIMPLE_ENGLISH}"
+            "Write two short posts for X (Twitter) for this person.\n\n"
+            f"Topic: {state.get('topic')}\n{view}{own_words}\n\n"
+            f"{DRAFT_VOICE}\n\n"
+            "The two options must make different points, not the same point twice.\n"
+            "Option 1 is the sharp opinion: the claim someone could argue with, stated "
+            "plainly, with no hedging.\n"
+            "Option 2 makes it concrete with an example or situation, and must contain at "
+            "least one detail that is not in Option 1. Only write it as their personal "
+            "experience ('I've seen', 'I spent') if their own words describe that experience. "
+            "Otherwise describe the situation without claiming it happened to them, because a "
+            "made-up personal story is a false claim published under their name.\n\n"
+            "Each post must be under 280 characters. Plain text only, no markdown, no "
+            "asterisks, since this is pasted straight into a tweet. Only suggest hashtags "
+            "if they would genuinely help; many technical audiences treat them as spam, so "
+            "'none' is usually right. Format exactly as:\n\n"
+            "Option 1:\n<text>\n\nOption 2:\n<text>\n\nHashtags: <comma-separated or 'none'>"
         )
         draft = await self._ask(ctx, prompt, DRAFT_FALLBACK)
         draft = _strip_markdown_emphasis(draft)
