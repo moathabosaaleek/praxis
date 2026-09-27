@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.1](https://github.com/moathabosaaleek/praxis/compare/v0.7.0...v0.7.1) (2026-09-27)
+
+
+### Bug Fixes
+
+* keep drafts faithful to the user's actual opinion ([#30](https://github.com/moathabosaaleek/praxis/issues/30)) ([ab1571e](https://github.com/moathabosaaleek/praxis/commit/ab1571e68441362d1401a6ea7d76b098cb4cabe0))
+
 ## [0.7.0](https://github.com/moathabosaaleek/praxis/compare/v0.6.0...v0.7.0) (2026-09-27)
 
 
