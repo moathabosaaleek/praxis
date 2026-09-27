@@ -688,6 +688,43 @@ async def test_the_two_options_are_asked_to_differ():
     assert "Option 2 makes it concrete" in prompt
 
 
+async def test_the_draft_may_not_make_the_opinion_stronger_than_it_is():
+    """Regression: "it's preferred to be offline" became "the only real way"."""
+    session = Session(
+        plugin="writer",
+        state={"step": "await_summary_choice", "topic": "X", "summary": "• point"},
+    )
+    llm = FakeLLM(answers=["the draft"])
+
+    await WriterPlugin().handle(
+        make_message(choice="writer:summary:confirm"), make_ctx(llm, FakeSessions(session))
+    )
+
+    prompt = llm.prompts[0]
+    assert "Never make their opinion stronger than it is" in prompt
+    assert "Keep their hedges" in prompt
+    assert "never stronger than what they actually believe" in prompt
+
+
+async def test_the_draft_speaks_as_one_person_not_as_we():
+    """Regression: drafts said "We are seeing" where the user would say "I"."""
+    session = Session(
+        plugin="writer",
+        state={"step": "await_summary_choice", "topic": "X", "summary": "• point"},
+    )
+    llm = FakeLLM(answers=["the draft"])
+
+    await WriterPlugin().handle(
+        make_message(choice="writer:summary:confirm"), make_ctx(llm, FakeSessions(session))
+    )
+
+    prompt = llm.prompts[0]
+    assert "not 'we are seeing' or 'people are doing'" in prompt
+    # First-person opinions are fine; first-person experience still needs evidence.
+    assert "Opinions in the first person are always fine" in prompt
+    assert "only allowed when their own words describe that experience" in prompt
+
+
 async def test_the_draft_may_not_invent_personal_experience():
     """Regression: 'they spend 90 days' was turned into 'I've spent the 90-day window'."""
     session = Session(
