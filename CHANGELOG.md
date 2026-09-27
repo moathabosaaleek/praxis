@@ -1,5 +1,12 @@
 # Changelog
 
+## [0.7.0](https://github.com/moathabosaaleek/praxis/compare/v0.6.0...v0.7.0) (2026-09-27)
+
+
+### Features
+
+* suggest hashtags with each draft ([#28](https://github.com/moathabosaaleek/praxis/issues/28)) ([e66642a](https://github.com/moathabosaaleek/praxis/commit/e66642a8bb7b7593b1c79353acf5112d43ecd1a2))
+
 ## [0.6.0](https://github.com/moathabosaaleek/praxis/compare/v0.5.0...v0.6.0) (2026-09-18)
 
 
