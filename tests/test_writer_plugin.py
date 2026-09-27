@@ -9,6 +9,7 @@ from core.plugin import PluginContext
 from plugins.writer import (
     ADDENDUM_PROMPT,
     CUSTOM_TOPIC_PROMPT,
+    HASHTAG_RULES,
     JUST_WRITE_IT,
     MAX_QUESTIONS,
     MAX_TURNS,
@@ -21,6 +22,7 @@ from plugins.writer import (
     TAP_STANCE,
     TAP_SUMMARY,
     WriterPlugin,
+    _length_warnings,
     _normalize_bullets,
     _strip_markdown_emphasis,
 )
@@ -751,6 +753,64 @@ async def test_summary_uses_a_consistent_bullet_regardless_of_model_style():
 
 
 # --- helpers ---------------------------------------------------------------
+
+
+async def test_the_draft_asks_for_real_hashtags_that_fit_the_limit():
+    session = Session(
+        plugin="writer",
+        state={"step": "await_summary_choice", "topic": "X", "summary": "• point"},
+    )
+    llm = FakeLLM(answers=["the draft"])
+
+    await WriterPlugin().handle(
+        make_message(choice="writer:summary:confirm"), make_ctx(llm, FakeSessions(session))
+    )
+
+    prompt = llm.prompts[0]
+    assert HASHTAG_RULES in prompt
+    assert "usually right" not in prompt  # the old instruction that suppressed hashtags
+
+
+def test_a_post_that_fits_with_its_hashtags_gets_no_warning():
+    draft = "Option 1:\nShort post.\n\nOption 2:\nAnother short one.\n\nHashtags: #AppSec #ZeroDay"
+
+    assert _length_warnings(draft) == []
+
+
+def test_a_post_that_is_too_long_with_its_hashtags_is_flagged():
+    long_post = "a" * 270  # fits alone, but not with the hashtags
+    draft = f"Option 1:\nShort.\n\nOption 2:\n{long_post}\n\nHashtags: #AppSec #ZeroDay"
+
+    warnings = _length_warnings(draft)
+
+    assert len(warnings) == 1
+    assert "Option 2" in warnings[0]
+    assert "287" in warnings[0]  # 270 + a space + 16 characters of "#AppSec #ZeroDay"
+
+
+def test_hashtags_of_none_are_not_counted():
+    draft = f"Option 1:\n{'a' * 280}\n\nHashtags: none"
+
+    assert _length_warnings(draft) == []
+
+
+def test_an_unexpected_draft_format_is_left_alone():
+    assert _length_warnings("the model ignored the format entirely") == []
+
+
+async def test_a_too_long_draft_reaches_the_user_with_a_warning():
+    session = Session(
+        plugin="writer",
+        state={"step": "await_summary_choice", "topic": "X", "summary": "• point"},
+    )
+    draft = f"Option 1:\n{'a' * 279}\n\nOption 2:\nshort\n\nHashtags: #AppSec"
+    llm = FakeLLM(answers=[draft])
+
+    response = await WriterPlugin().handle(
+        make_message(choice="writer:summary:confirm"), make_ctx(llm, FakeSessions(session))
+    )
+
+    assert "Note: Option 1 is about" in response.text
 
 
 def test_strip_markdown_emphasis_leaves_plain_text_untouched():

@@ -24,6 +24,10 @@ STANCES = {"agree", "disagree", "complicated"}
 MAX_QUESTIONS = 6
 MAX_TURNS = 14
 
+X_CHAR_LIMIT = 280
+_OPTION = re.compile(r"Option (\d):[ \t]*\n(.*?)(?=\n\s*\n(?:Option \d:|Hashtags:)|\Z)", re.DOTALL)
+_HASHTAGS = re.compile(r"^Hashtags:[ \t]*(.+)$", re.MULTILINE)
+
 _EMPHASIS_PAIR = re.compile(r"\*\*(.+?)\*\*|\*(.+?)\*")
 _LEADING_BULLET = re.compile(r"^[\s*•\-]+")
 
@@ -80,6 +84,17 @@ DRAFT_VOICE = (
     "guessing. Never state a technical claim you are unsure about."
 )
 
+# X counts hashtags toward the 280-character limit, so the post must leave room for them.
+HASHTAG_RULES = (
+    "Suggest 1 to 3 hashtags that fit this specific post. Use only well-known hashtags "
+    "that people in the tech and security community actually follow, never invented ones. "
+    "Prefer specific tags such as #AppSec or #ZeroDay over empty ones such as #tech. Write "
+    "multi-word tags in CamelCase so they are readable. Answer none only if no hashtag "
+    "genuinely fits.\n"
+    "Keep each post at or under 240 characters. X allows 280 and counts the hashtags "
+    "toward that limit, so the post itself must leave room for them."
+)
+
 NO_OPINION_YET = (
     "You haven't told me your opinion yet, so this is a general post about the topic "
     "rather than your own view.\n\n"
@@ -97,6 +112,27 @@ def _strip_markdown_emphasis(text: str) -> str:
     asterisk would show up in the posted text.
     """
     return _EMPHASIS_PAIR.sub(lambda m: m.group(1) or m.group(2), text)
+
+
+def _length_warnings(draft: str) -> list[str]:
+    """Measure each option plus its hashtags, since a model cannot count characters.
+
+    Close enough for plain English text; X counts links and some emoji differently.
+    """
+    found = _HASHTAGS.search(draft)
+    tags = found.group(1).strip() if found else ""
+    if tags.lower() == "none":
+        tags = ""
+
+    warnings = []
+    for number, text in _OPTION.findall(draft):
+        total = len(text.strip()) + (len(tags) + 1 if tags else 0)
+        if total > X_CHAR_LIMIT:
+            warnings.append(
+                f"Note: Option {number} is about {total} characters with the hashtags. "
+                f"X allows {X_CHAR_LIMIT}, so trim it before posting."
+            )
+    return warnings
 
 
 def _normalize_bullets(text: str) -> str:
@@ -481,14 +517,16 @@ class WriterPlugin:
             "experience ('I've seen', 'I spent') if their own words describe that experience. "
             "Otherwise describe the situation without claiming it happened to them, because a "
             "made-up personal story is a false claim published under their name.\n\n"
-            "Each post must be under 280 characters. Plain text only, no markdown, no "
-            "asterisks, since this is pasted straight into a tweet. Only suggest hashtags "
-            "if they would genuinely help; many technical audiences treat them as spam, so "
-            "'none' is usually right. Format exactly as:\n\n"
-            "Option 1:\n<text>\n\nOption 2:\n<text>\n\nHashtags: <comma-separated or 'none'>"
+            "Plain text only, no markdown, no asterisks, since this is pasted straight into "
+            f"a tweet.\n\n{HASHTAG_RULES}\n\n"
+            "Format exactly as:\n\n"
+            "Option 1:\n<text>\n\nOption 2:\n<text>\n\nHashtags: <#Tag #Tag, or none>"
         )
         draft = await self._ask(ctx, prompt, DRAFT_FALLBACK)
         draft = _strip_markdown_emphasis(draft)
+        warnings = _length_warnings(draft)
+        if warnings:
+            draft = f"{draft}\n\n" + "\n".join(warnings)
 
         if ctx.sessions:
             await ctx.sessions.clear(message.chat_id)
