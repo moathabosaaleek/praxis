@@ -1,6 +1,8 @@
 [project]
 name = "praxis"
 version = "0.7.1"
+description = "A private personal assistant that runs through a messaging interface"
+license = "MIT"
 requires-python = ">=3.12"
 
 [tool.pytest.ini_options]
